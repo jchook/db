@@ -22,7 +22,7 @@ import type {
   Where,
 } from './ir.js'
 import type { InitialQueryBuilder, QueryBuilder } from './builder/index.js'
-import type { LoadSubsetOptions } from '../types.js'
+import type { LoadSubsetOptions, QueryMeta } from '../types.js'
 
 type StableIdentityValue =
   | null
@@ -71,6 +71,13 @@ export function getStableValueHash(value: unknown, path = `value`): string {
   return JSON.stringify(canonicalizeRuntimeValue(value, path, new WeakSet()))
 }
 
+/** Identity for immutable query context, independent of request ownership. */
+export function getQueryMetaKey(
+  meta: QueryMeta | undefined,
+): string | undefined {
+  return meta === undefined ? undefined : getStableValueHash(meta, `meta`)
+}
+
 /**
  * Returns the semantic identity of a structured query.
  *
@@ -98,6 +105,7 @@ export function getLoadSubsetDemandKey(
   options: LoadSubsetOptions,
 ): DemandKey | undefined {
   if (
+    options.meta === undefined &&
     options.where === undefined &&
     !options.orderBy?.length &&
     options.limit === undefined &&
@@ -113,6 +121,10 @@ export function getLoadSubsetDemandKey(
   const result: Record<string, StableIdentityValue> = {
     type: `loadSubsetDemand`,
     query: canonicalizeLoadSubsetQuery(options, `loadSubset`, seen),
+  }
+
+  if (options.meta !== undefined) {
+    result.meta = getQueryMetaKey(options.meta)!
   }
 
   if (options.limit !== undefined) {

@@ -6,6 +6,7 @@ import {
   createLiveQueryObserver,
   deepEquals,
   getPreparedLiveQueryIdentity,
+  getQueryMetaKey,
   getStableValueHash,
   isCollection,
   prepareLiveQueryValue,
@@ -734,6 +735,7 @@ function createHookInstance(dbClient: DbClient | undefined) {
     sourceIds: createSourceIdBindings(),
     observer: null as LiveQueryObserver<object, string | number> | null,
     queryHash: undefined as string | undefined,
+    metaKey: undefined as string | undefined,
     suspenseKey: undefined as string | undefined,
     identityError: undefined as UnhashableQueryIRError | undefined,
     subscribe: null as ((onStoreChange: () => void) => () => void) | null,
@@ -761,6 +763,11 @@ function useLiveQueryImpl(
   const queryKey = !inputIsCollection
     ? getExplicitQueryKey(configOrQueryOrCollection)
     : undefined
+  let metaKey = getQueryMetaKey(
+    !inputIsCollection && typeof configOrQueryOrCollection === `object`
+      ? configOrQueryOrCollection?.meta
+      : undefined,
+  )
   let preparedQueryValue: unknown | typeof unpreparedQueryValue =
     unpreparedQueryValue
   let identityDeps: ReadonlyArray<unknown>
@@ -769,7 +776,11 @@ function useLiveQueryImpl(
 
   if (queryKey) {
     identityDeps = queryKey
-    streamIdentity = [`queryKey`, queryKey]
+    streamIdentity = [
+      `queryKey`,
+      queryKey,
+      ...(metaKey === undefined ? [] : [[`meta`, metaKey]]),
+    ]
   } else if (deps !== undefined) {
     identityDeps = resolvedDeps
     // Deps decide reuse. Only hydration and Suspense read the query hash; the
@@ -814,6 +825,16 @@ function useLiveQueryImpl(
       identityDeps = instance.legacyUnhashableIdentity
       identityError = preparation.error
     }
+  }
+
+  if (preparedQueryValue !== unpreparedQueryValue) {
+    metaKey = getQueryMetaKey(
+      preparedQueryValue &&
+        typeof preparedQueryValue === `object` &&
+        `query` in preparedQueryValue
+        ? (preparedQueryValue as LiveQueryCollectionConfig<Context>).meta
+        : undefined,
+    )
   }
 
   let queryHash: string | undefined
@@ -888,6 +909,7 @@ function useLiveQueryImpl(
   const suspenseCollection = suspenseEntry?.collection
 
   const identityChanged =
+    instance.metaKey !== metaKey ||
     instance.deps === null ||
     (deps !== undefined
       ? instance.deps.length !== identityDeps.length ||
@@ -984,6 +1006,7 @@ function useLiveQueryImpl(
       instance.deps = [...identityDeps]
     }
     instance.client = dbClient
+    instance.metaKey = metaKey
     instance.queryHash = queryHash
     instance.suspenseKey = suspenseKey
     instance.identityError = identityError

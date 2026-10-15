@@ -99,6 +99,7 @@ export {
   UnhashableQueryIRError,
   canonicalizeQueryIR,
   getLoadSubsetDemandKey,
+  getQueryMetaKey,
   getQueryIdentity,
   getStableQueryBuilderHash,
   getStableQueryIRHash,

@@ -281,6 +281,7 @@ export class CollectionSubscriber<
       whereExpression,
       onStatusChange,
       onLoadSubsetError,
+      meta: this.collectionConfigBuilder.meta,
       deferAcquisition: this.defersAcquisition(),
       truncateReplayPublication: this.truncateReplayPublicationControl(),
       orderBy: hints.orderBy,
@@ -321,6 +322,7 @@ export class CollectionSubscriber<
       whereExpression,
       onStatusChange,
       onLoadSubsetError,
+      meta: this.collectionConfigBuilder.meta,
       deferAcquisition: this.defersAcquisition(),
       truncateReplayPublication: this.truncateReplayPublicationControl(() => {
         // Recovery favors a simple, authoritative rebuild over resuming a

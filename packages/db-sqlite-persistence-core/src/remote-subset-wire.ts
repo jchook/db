@@ -68,6 +68,7 @@ export type RemoteSubsetWireCursor = {
 
 /** The complete data portion transported by a remote-subset request. */
 export type TransportedLoadSubsetOptions = {
+  meta?: LoadSubsetOptions[`meta`]
   where?: RemoteSubsetWireExpression
   orderBy?: Array<RemoteSubsetWireOrderByClause>
   limit?: number
@@ -153,6 +154,7 @@ function visitLoadSubsetOptions(
 ): TransportedLoadSubsetOptions {
   assertPlainContainer(options, `options`)
   assertAllowedProperties(options, `options`, [
+    `meta`,
     `where`,
     `orderBy`,
     `limit`,
@@ -177,6 +179,7 @@ function visitLoadSubsetOptions(
   const projected: TransportedLoadSubsetOptions = validateOnly
     ? (options as TransportedLoadSubsetOptions)
     : {}
+  const meta = readDataProperty(options, `meta`, `options.meta`)
   const where = readDataProperty(options, `where`, `options.where`)
   const orderBy = readDataProperty(options, `orderBy`, `options.orderBy`)
   const limit = readDataProperty(options, `limit`, `options.limit`)
@@ -184,6 +187,12 @@ function visitLoadSubsetOptions(
   const offset = readDataProperty(options, `offset`, `options.offset`)
   const refetch = readDataProperty(options, `refetch`, `options.refetch`)
 
+  if (meta.present && meta.value !== undefined) {
+    requireObject(meta.value, `options.meta`)
+    const result = projectWireValue(meta.value, `options.meta`, state)
+    if (!state.validateOnly)
+      projected.meta = result as LoadSubsetOptions[`meta`]
+  }
   if (where.present && where.value !== undefined) {
     const result = projectExpression(where.value, `options.where`, state)
     if (!state.validateOnly) projected.where = result

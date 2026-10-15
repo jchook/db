@@ -9,6 +9,7 @@ import {
   compileSingleRowExpression,
   deepEquals,
   getLoadSubsetDemandKey,
+  getQueryMetaKey,
   toBooleanPredicate,
   validateSyncPersistenceCapability,
   warnOnce,
@@ -1719,7 +1720,9 @@ export function queryCollectionOptions(
         // Refetch starts another acquisition for the same semantic demand. It
         // must not create a second Query cache or unload identity.
         const { refetch: _refetch, ...queryKeyOptions } = opts
-        return queryKey(queryKeyOptions)
+        const key = queryKey(queryKeyOptions)
+        const metaKey = getQueryMetaKey(opts.meta)
+        return metaKey === undefined ? key : [...key, { queryMeta: metaKey }]
       } else if (syncMode === `on-demand`) {
         // A static on-demand key is extended by exact semantic demand so
         // equivalent predicates share one entry while distinct windows do not.
@@ -1917,6 +1920,7 @@ export function queryCollectionOptions(
       // Existing dependents keep their original observer lease even if an
       // explicit refetch creates an exact Query for the same requested scope.
       const sharesFullSource =
+        opts.meta === undefined &&
         !opts.refetch &&
         fullSourceKey !== undefined &&
         fullSourceHash !== requestedHash &&

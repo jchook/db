@@ -689,6 +689,24 @@ render, nor does it relax the stable public Collection facade contract above.
 
 ## Demand plane
 
+### Query metadata
+
+A live-query configuration's optional `meta` is immutable, opaque adapter
+context. Every source subscription created by that query retains it on every
+subset acquisition, including joins, includes, ordered continuation, recovery,
+and truncate replay; release retains the acquisition's exact options. A
+separately configured source live-query Collection retains its own context.
+Metadata has no effect on relational evaluation or Collection-wide sync.
+
+Metadata follows query-key structural value semantics. It participates in
+live-query identity even with explicit query keys or legacy hook dependencies,
+and in exact-demand identity. Equal metadata may share work; different metadata
+must not inherit another scope's acquisition, completion, or adapter cache
+entry. Absence preserves existing identities. Source rows remain shared.
+Adapters that implement broader coverage or custom cache keys must also preserve
+this separation. Query DB appends metadata identity to function-built keys and
+only applies its full-source coverage shortcut to requests without metadata.
+
 ### Demand grouping and ownership
 
 Demand is derived from data, but it performs asynchronous side effects outside

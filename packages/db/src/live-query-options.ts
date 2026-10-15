@@ -7,6 +7,7 @@ import {
   getPooledQueryIdentity,
 } from './query/pooled-live-query.js'
 import {
+  getQueryMetaKey,
   getStableQueryBuilderHash,
   getStableValueHash,
 } from './query/ir-stable-identity.js'
@@ -177,6 +178,9 @@ export function getPreparedLiveQueryIdentity(value: unknown): unknown {
     return [
       `config`,
       getPreparedLiveQueryIdentity(config.query),
+      ...(config.meta === undefined
+        ? []
+        : [[`meta`, getQueryMetaKey(config.meta)]]),
       [`getKey`, config.getKey],
       [`schema`, config.schema],
       [`singleResult`, config.singleResult === true],
@@ -194,8 +198,19 @@ export function getLiveQueryHash(
   preparedValue: unknown,
   queryKey?: LiveQueryKey,
 ): string {
+  const metaKey = getQueryMetaKey(
+    preparedValue &&
+      typeof preparedValue === `object` &&
+      `query` in preparedValue
+      ? (preparedValue as LiveQueryOptions).meta
+      : undefined,
+  )
   const identity = queryKey?.length
-    ? [`queryKey`, queryKey]
+    ? [
+        `queryKey`,
+        queryKey,
+        ...(metaKey === undefined ? [] : [[`meta`, metaKey]]),
+      ]
     : isCollection(preparedValue)
       ? [`collection`, preparedValue.id]
       : [`derived`, getPreparedLiveQueryIdentity(preparedValue)]

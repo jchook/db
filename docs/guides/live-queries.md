@@ -27,6 +27,135 @@ const activeUsers = createCollection(liveQueryCollectionOptions({
 
 The result types are automatically inferred from your query structure, providing full TypeScript support. When you use a `select` clause, the result type matches your projection. Without `select`, you get the full schema with proper join optionality.
 
+## Query metadata
+
+Pass `meta` in a live-query configuration to give source adapters context for
+loading policies, routing, or diagnostics. Core treats its fields as opaque:
+only your adapter assigns meaning to them. The same option works with
+`createLiveQueryCollection`, `liveQueryCollectionOptions`, `DbClient.preloadLiveQuery`,
+and React's configuration form of `useLiveQuery` (including Suspense).
+
+```tsx
+const orders = useLiveQuery({
+  query: (q) => q.from({ order: ordersCollection }),
+  meta: { route: 'replica', traceId: 'orders-panel' },
+})
+
+const pages = useLiveInfiniteQuery(
+  (q) => q.from({ order: ordersCollection }).orderBy(({ order }) => order.id),
+  { pageSize: 20, meta: { route: 'replica' } },
+)
+```
+
+Every source subscription created by that query carries the metadata to
+`LoadSubsetOptions.meta`. This includes joined sources, subqueries, includes,
+ordered pages, cursor continuations, retries, and truncate replay. The matching
+`unloadSubset` receives the same acquisition options and metadata. A direct
+`collection.subscribeChanges(listener, { meta })` can supply the same context.
+Configure metadata when creating a live-query Collection; observing an already
+created Collection does not override it. An independently created live-query
+Collection used as a source retains its own configured metadata.
+
+### Types and identity
+
+`QueryMeta` defaults to `Record<string, unknown>`. Register an application-wide
+shape to check both callers and adapter callbacks:
+
+```ts
+import '@tanstack/db'
+
+declare module '@tanstack/db' {
+  interface Register {
+    queryMeta: {
+      fetchMode?: 'auto' | 'none'
+      route?: 'primary' | 'replica'
+      traceId?: string
+    }
+  }
+}
+```
+
+Metadata uses the same structural value hashing as `queryKey`. Plain records
+compare by their enumerable string-keyed fields, independent of property order;
+arrays compare in order. Use immutable data with stable data properties, and do
+not attach behavior to reference identity, non-enumerable properties, or symbol
+keys. Functions, symbols, cyclic structures, and unsupported class instances
+are rejected. An explicit `queryKey` does not bypass this requirement.
+
+- Omitted `meta` and `meta: undefined` preserve the default identity and loading
+  behavior. An empty object is a distinct metadata scope.
+- Equal metadata can reuse a query stream or deduplicated request. Different
+  metadata always separates those identities, even with the same `queryKey` or
+  legacy dependency array. React rebuilds the query when metadata changes;
+  infinite queries also reset their pages.
+- Core forwards the supplied object without cloning or freezing it. Treat it
+  and all nested values as immutable for the lifetime of the query. Reusing a
+  structurally equal query may retain the first caller's equivalent object.
+- Metadata separates loading context, not stored rows. All queries over one
+  source Collection still observe its shared data. Keep authorization and tenant
+  boundaries in separate Collections, and express result filtering in the query.
+- Custom adapter caches must include metadata in their identity. Use
+  `getLoadSubsetDemandKey(options)` for exact demand deduplication; it includes
+  metadata and excludes ownership fields such as the abort signal.
+
+Metadata does not change Collection-wide sync startup, eager loading, or mutation
+handlers. Those operations have no single requesting query. To implement a
+per-query loading policy, use an on-demand source adapter whose `loadSubset`
+handles that policy.
+
+### Routing remote requests
+
+The Query collection adapter exposes query metadata at
+`ctx.meta.loadSubsetOptions.meta`, separately from its Collection-level `meta`.
+For example, a complete remote list can choose a read endpoint:
+
+```ts
+const ordersCollection = createCollection(queryCollectionOptions({
+  queryKey: ['orders'],
+  queryClient,
+  syncMode: 'on-demand',
+  getKey: (order: { id: string }) => order.id,
+  queryFn: async (ctx) => {
+    const request = ctx.meta?.loadSubsetOptions
+    const endpoint = request?.meta?.route === 'replica'
+      ? '/api/replica/orders'
+      : '/api/orders'
+    const response = await fetch(endpoint, { signal: ctx.signal })
+    if (!response.ok) throw new Error('Could not load orders')
+    return await response.json() as Array<{ id: string }>
+  },
+}))
+```
+
+The adapter separates Query cache entries for different query metadata with
+both static and function-built keys. A function-built key receives the metadata
+in its options; the adapter also appends its metadata identity. Metadata-bearing
+requests do not reuse an unrelated full-source Query. Row ownership and release
+remain scoped to each acquisition. Persistence wrappers preserve metadata across
+their coordinator wire, subject to the wire's supported data types.
+
+### External fetching with local observation
+
+A custom adapter can interpret a flag to suppress its own subset fetch:
+
+```ts
+const loadSubset: LoadSubsetFn = (options) => {
+  if (options.meta?.fetchMode === 'none') return true
+  return fetchAndApplySubset(options)
+}
+
+const result = useLiveQuery({
+  query: (q) => q.from({ resource: resourcesCollection }),
+  meta: { fetchMode: 'none' },
+})
+```
+
+Your application can fetch a FHIR Bundle separately and ingest its resources
+through the adapter's normal sync writes. The query observes those writes and
+later updates. Returning `true` completes the no-op acquisition synchronously;
+core does not interpret `fetchMode`. This does not prevent other queries from
+fetching into the shared Collection or stop work started by its sync function.
+
 ## Virtual properties
 
 Live query results include computed, read-only virtual properties on every row:

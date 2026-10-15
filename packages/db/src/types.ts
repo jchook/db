@@ -319,6 +319,16 @@ export type CursorExpressions = {
   lastKey?: string | number
 }
 
+/** Application-wide types registered through module augmentation. */
+export interface Register {}
+
+/** Opaque, immutable query context. Values must support query-key hashing. */
+export type QueryMeta = Register extends {
+  queryMeta: infer TMeta extends object
+}
+  ? TMeta
+  : Record<string, unknown>
+
 /**
  * Immutable request data. From submission onward, callers and adapters must
  * not mutate these options, their expression trees, comparison options, or
@@ -329,6 +339,8 @@ export type CursorExpressions = {
  * live: aborting the signal or releasing the subscription is supported.
  */
 export type LoadSubsetOptions = {
+  /** Query context, also retained for the matching unload and replay. */
+  meta?: QueryMeta
   /**
    * Revalidate this exact semantic demand even when an adapter has already
    * completed or cached it. This controls the acquisition attempt; it does
@@ -1095,6 +1107,8 @@ export interface SubscribeChangesOptions<
   T extends object = Record<string, unknown>,
   TKey extends string | number = string | number,
 > {
+  /** Immutable context passed to every subset acquisition by this subscription. */
+  meta?: QueryMeta
   /** Whether to include the current state as initial changes */
   includeInitialState?: boolean
   /**

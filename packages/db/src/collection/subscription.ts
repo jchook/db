@@ -20,6 +20,7 @@ import type {
   ChangeMessage,
   LoadSubsetOptions,
   LoadSubsetRequestResult,
+  QueryMeta,
   Subscription,
   SubscriptionEvents,
   SubscriptionLoadSubsetErrorEvent,
@@ -70,6 +71,7 @@ type SubsetResultObserver = (
 ) => void
 
 type CollectionSubscriptionOptions = {
+  meta?: QueryMeta
   includeInitialState?: boolean
   /** Pre-compiled expression for filtering changes */
   whereExpression?: BasicExpression<boolean>
@@ -1218,6 +1220,7 @@ export class CollectionSubscription
     // Request the sync layer to load more data
     // don't await it, we will load the data into the collection when it comes in
     const loadOptions: LoadSubsetOptions = {
+      ...(this.options.meta !== undefined && { meta: this.options.meta }),
       ...(opts?.refetch ? { refetch: true } : {}),
       where: stateOpts.where,
       signal: opts?.signal,
@@ -1615,6 +1618,7 @@ export class CollectionSubscription
     // Note: `where` does NOT include cursor expressions - they are passed separately
     // The sync layer can choose to use cursor-based or offset-based pagination
     const loadOptions: LoadSubsetOptions = {
+      ...(this.options.meta !== undefined && { meta: this.options.meta }),
       ...(refetch ? { refetch: true } : {}),
       where, // Main filter only, no cursor
       limit: providerLimit,

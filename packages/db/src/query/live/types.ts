@@ -1,6 +1,7 @@
 import type { D2, RootStreamBuilder } from '@tanstack/db-ivm'
 import type {
   CollectionConfig,
+  QueryMeta,
   ResultStream,
   StringCollationConfig,
 } from '../../types.js'
@@ -71,6 +72,13 @@ export interface LiveQueryCollectionConfig<
    * If not provided, defaults to `live-query-${number}` with auto-incrementing number
    */
   id?: string
+
+  /**
+   * Opaque context passed to source adapters on every subset load and unload.
+   * Immutable and structurally hashed as part of query and request identity,
+   * including when an explicit queryKey is supplied.
+   */
+  meta?: QueryMeta
 
   /**
    * Query builder function that defines the live query

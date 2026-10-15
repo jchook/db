@@ -1,4 +1,5 @@
 import { D2, output } from '@tanstack/db-ivm'
+import { getQueryMetaKey } from '../ir-stable-identity.js'
 import { compileQuery } from '../compiler/index.js'
 import {
   LoadSubsetOperationAbortedError,
@@ -183,9 +184,14 @@ export class CollectionConfigBuilder<
   // Map of lexical source IDs to optimizable ORDER BY state
   optimizableOrderByCollections = createSourceRecord<OrderByOptimizationInfo>()
 
+  get meta() {
+    return this.config.meta
+  }
+
   constructor(
     private readonly config: LiveQueryCollectionConfig<TContext, TResult>,
   ) {
+    getQueryMetaKey(config.meta)
     // Generate a unique ID if not provided
     this.id = config.id || `live-query-${++liveQueryCollectionCounter}`
 

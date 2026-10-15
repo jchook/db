@@ -9,6 +9,7 @@ import {
   fetchNextLiveQueryWindowPage,
   getLiveQueryWindowCollectionWarning,
   getLiveQueryWindowInputKind,
+  getQueryMetaKey,
   liveQueryWindowMatches,
   normalizeLiveQueryWindowPageSize,
   resolveLiveQueryWindowInput,
@@ -44,6 +45,7 @@ import type {
   LiveQueryWindowController,
   NonSingleResult,
   QueryBuilder,
+  QueryMeta,
 } from '@tanstack/db'
 
 // Live queries created here are cleaned up immediately (0 disables GC).
@@ -60,6 +62,8 @@ export type UseLiveInfiniteQueryConfig<_TContext extends Context> = {
   queryKey?: LiveQueryKey
   /** Override the nearest DbProvider for this query. */
   client?: DbClient
+  /** Immutable context passed to every source subset request. */
+  meta?: QueryMeta
   pageSize?: number
   /** First result-page label, not a server cursor or remote offset. */
   initialPageParam?: number
@@ -112,6 +116,7 @@ type InfiniteQueryRenderState = {
   inputKind: `collection` | `query`
   inputCollection: Collection<any, any, any> | null
   inputQuery: unknown
+  metaKey: string | undefined
   client: DbClient | undefined
   identityMode: `collection` | `queryKey` | `legacyDeps` | `derived`
   dependencies: Array<unknown> | null
@@ -127,6 +132,7 @@ type InfiniteQueryRenderState = {
 }
 
 type RenderedWindowCollection = {
+  metaKey: string | undefined
   client: DbClient | undefined
   dependencies: Array<unknown>
   collection: Collection<any, any, any>
@@ -198,6 +204,13 @@ export function useLiveInfiniteQuery<TContext extends Context>(
   const inputIsCollection =
     getLiveQueryWindowInputKind(queryFnOrCollection) === `collection`
 
+  const metaKey = getQueryMetaKey(config.meta)
+  if (inputIsCollection && metaKey !== undefined) {
+    throw new Error(
+      `Set meta when creating the live-query Collection, not when observing it.`,
+    )
+  }
+
   const committedRef = useRef<InfiniteQueryRenderState | null>(null)
   const committed = committedRef.current
   // Like useLiveQuery's instance memo, keep the window collection built by the
@@ -268,6 +281,7 @@ export function useLiveInfiniteQuery<TContext extends Context>(
 
   const usesLegacyDeps =
     !inputIsCollection && config.queryKey === undefined && deps !== undefined
+  const sameMeta = committed?.metaKey === metaKey
   const dependencyComparison = compareLiveQueryWindowDependencies(
     committed?.dependencies,
     identityDeps,
@@ -275,9 +289,13 @@ export function useLiveInfiniteQuery<TContext extends Context>(
   const sameClient = committed?.client === dbClient
   const dependenciesChanged =
     !inputIsCollection &&
-    !queryIdentityMatches(dependencyComparison, sameClient, usesLegacyDeps)
+    (!sameMeta ||
+      !queryIdentityMatches(dependencyComparison, sameClient, usesLegacyDeps))
   const dependenciesStructurallyEqual =
-    usesLegacyDeps && sameClient && dependencyComparison.structurallyEqual
+    usesLegacyDeps &&
+    sameMeta &&
+    sameClient &&
+    dependencyComparison.structurallyEqual
   const needsNewCollection =
     committed === null ||
     committed.inputKind !== inputKind ||
@@ -331,6 +349,7 @@ export function useLiveInfiniteQuery<TContext extends Context>(
       if (
         !inputIsCollection &&
         rendered !== null &&
+        rendered.metaKey === metaKey &&
         queryIdentityMatches(
           compareLiveQueryWindowDependencies(
             rendered.dependencies,
@@ -367,6 +386,7 @@ export function useLiveInfiniteQuery<TContext extends Context>(
           collection = createLiveQueryCollection({
             query: input.query.limit(requiredLimit).offset(0),
             gcTime: DEFAULT_GC_TIME_MS,
+            meta: config.meta,
           })
           startInRender = true
           createdCollection = true
@@ -397,6 +417,7 @@ export function useLiveInfiniteQuery<TContext extends Context>(
     // started, so a retry after a startup error builds a new one and throws.
     if (createdCollection) {
       renderedCollectionRef.current = {
+        metaKey,
         client: dbClient,
         dependencies: [...identityDeps],
         collection,
@@ -405,6 +426,7 @@ export function useLiveInfiniteQuery<TContext extends Context>(
     }
 
     renderState = {
+      metaKey,
       inputKind,
       inputCollection: inputIsCollection ? collection : null,
       inputQuery: inputIsCollection ? null : queryFnOrCollection,
